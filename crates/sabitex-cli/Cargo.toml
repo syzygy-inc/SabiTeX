@@ -1,0 +1,14 @@
+[package]
+name = "sabitex-cli"
+description = "Native command-line driver for the SabiTeX engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "sabitex"
+path = "src/main.rs"
+
+[dependencies]
+sabitex-core = { path = "../sabitex-core", features = ["shaping"] }
