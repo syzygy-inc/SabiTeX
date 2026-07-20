@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/sabitex-core",
     "crates/sabitex-cli",
+    "crates/sabitex-wasm",
 ]
 
 [workspace.package]

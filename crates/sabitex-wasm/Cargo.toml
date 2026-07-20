@@ -1,0 +1,16 @@
+[package]
+name = "sabitex-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "SabiTeX wasm bindings (hand-rolled ABI, no wasm-bindgen)"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+sabitex-core = { path = "../sabitex-core" }
+
+[features]
+shaping = ["sabitex-core/shaping"]
