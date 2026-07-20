@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/sabitex-core",
+]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/syzygy-inc/SabiTeX"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

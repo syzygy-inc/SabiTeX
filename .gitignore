@@ -1,0 +1,11 @@
+target/
+/dev/
+/__/
+*.log
+*.fmt
+*.xdv
+*.dvi
+examples/**/*.pdf
+
+!reference/tex/trip/*.log
+!reference/etex/etrip/*.log
