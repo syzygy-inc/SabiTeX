@@ -1,0 +1,9 @@
+% 和文サンプル: JFM (umin10) による和文組版。フォーマット不要(INITEX)。
+% umin10.tfm は TeX Live があれば kpsewhich で解決される。なければ
+% reference/uptex/umin10.tfm をこのディレクトリへコピーして実行する。
+% (パスで \font 指定すると DVI のフォント名にパスが焼き込まれ、
+%  xdvipdfmx が kanjix.map を引けなくなるため、名前で参照する。)
+\catcode`\{=1 \catcode`\}=2
+\font\mincho=umin10 \mincho
+\shipout\hbox{こんにちは、世界。}
+\end
