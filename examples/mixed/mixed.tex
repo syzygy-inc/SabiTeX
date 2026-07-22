@@ -1,0 +1,23 @@
+% 和欧混植サンプル: native font の欧文と JFM の和文を同じ段落で混植する。
+% フォーマットを使わないため、和文組版のパラメータ(kanjiskip、
+% xkanjiskip、禁則ペナルティ)と行送りを明示的に設定している。
+% umin10.tfm の解決は japanese サンプルと同じ(TeX Live または手元コピー)。
+%
+% 和文パラメータのプリミティブは拡張モード限定なので、e-TeX 系の慣例
+% どおり ** 行を * で始めて起動する:  sabitex "*\input mixed"
+\catcode`\{=1 \catcode`\}=2
+\font\body="[../../reference/latin-modern/lmroman10-regular.otf]" at 10pt
+\font\mincho=umin10
+\body \mincho
+\baselineskip=16pt
+\hsize=210pt
+\kanjiskip=0pt plus .4pt minus .4pt
+\xkanjiskip=2.4pt plus 1pt minus 1pt
+\prebreakpenalty`、=10000
+\prebreakpenalty`。=10000
+\prebreakpenalty`」=10000
+\postbreakpenalty`「=10000
+\shipout\vbox{SabiTeX は Rust で書かれた TeX 互換エンジンである。%
+欧文 native font と和文 JFM をひとつの段落で混植でき、%
+和欧の境界には xkanjiskip の空きが入り、「約物」や句読点には禁則が効く。\par}
+\end
