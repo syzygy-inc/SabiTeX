@@ -6,6 +6,7 @@ target/
 *.xdv
 *.dvi
 examples/**/*.pdf
+examples/**/umin10.tfm
 
 !reference/tex/trip/*.log
 !reference/etex/etrip/*.log

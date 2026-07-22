@@ -26,3 +26,13 @@ jobs:
         run: cargo test --workspace
       - name: Build (wasm32)
         run: cargo build -p sabitex-core --target wasm32-unknown-unknown
+      - name: Examples (smoke)
+        run: |
+          cargo build --release -p sabitex-cli
+          cargo build --release -p sabitex-wasm --target wasm32-unknown-unknown
+          cp reference/uptex/umin10.tfm examples/japanese/
+          cp reference/uptex/umin10.tfm examples/mixed/
+          (cd examples/hello && ../../target/release/sabitex --interaction=batchmode hello && test -s hello.dvi)
+          (cd examples/japanese && ../../target/release/sabitex --interaction=batchmode japanese && test -s japanese.dvi)
+          (cd examples/mixed && ../../target/release/sabitex --interaction=batchmode "*\input mixed" && test -s mixed.dvi)
+          node examples/wasm-node/main.mjs

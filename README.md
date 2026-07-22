@@ -33,7 +33,7 @@ See [document/cli.md](document/cli.md) for the CLI and [document/wasm.md](docume
 | `crates/sabitex-core` | The engine itself (zero dependencies; I/O only through traits) |
 | `crates/sabitex-cli` | Native CLI (binary name `sabitex`) |
 | `crates/sabitex-wasm` | wasm bindings (hand-rolled C ABI) |
-| `examples/` | Self-contained samples (Latin OpenType and Japanese JFM) |
+| `examples/` | Samples, one claim each (Latin OpenType, Japanese JFM, mixed paragraphs, TFM math, wasm ABI) |
 | `document/` | Usage guides (building, CLI, wasm) |
 | `specification/` | Records of design decisions, behavioral specifications, and test comparison rules |
 | `reference/` | Third-party primary sources and test data (grouped per software; each file keeps its own license) |
