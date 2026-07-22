@@ -1,0 +1,28 @@
+% 数式サンプル: フォーマットなしで Computer Modern の数式フォントを
+% \textfont に張り、TFM ベースの数式組版を確認する。cm* の TFM は
+% TeX Live(kpsewhich)で解決されるため、TeX Live が必要。
+%
+% INITEX は数式クラス(mathcode)と数式グルー(muskip)をほとんど
+% 持たないため、plain.tex 相当の最小限をここで設定する。
+\catcode`\{=1 \catcode`\}=2 \catcode`\$=3 \catcode`\^=7 \catcode`\_=8
+\font\tenrm=cmr10 \font\teni=cmmi10 \font\tensy=cmsy10 \font\tenex=cmex10
+\font\sevenrm=cmr7 \font\seveni=cmmi7 \font\sevensy=cmsy7
+\font\fiverm=cmr5 \font\fivei=cmmi5 \font\fivesy=cmsy5
+\textfont0=\tenrm \scriptfont0=\sevenrm \scriptscriptfont0=\fiverm
+\textfont1=\teni \scriptfont1=\seveni \scriptscriptfont1=\fivei
+\textfont2=\tensy \scriptfont2=\sevensy \scriptscriptfont2=\fivesy
+\textfont3=\tenex \scriptfont3=\tenex \scriptscriptfont3=\tenex
+\thinmuskip=3mu
+\medmuskip=4mu plus 2mu minus 4mu
+\thickmuskip=5mu plus 5mu
+\mathcode`\+="202B
+\mathcode`\-="2200
+\mathcode`\=="303D
+\mathcode`\<="313C
+\mathcode`\>="313E
+\mathcode`\(="4028
+\mathcode`\)="5029
+\mathcode`\,="613B
+\tenrm
+\shipout\hbox{$f(x) = ax^2 + bx + c, \hskip 10pt x_1 < x_2, \hskip 10pt {a+b \over c-d}$}
+\end
