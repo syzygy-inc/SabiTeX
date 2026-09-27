@@ -180,6 +180,36 @@ impl Terminal for NativeTerminal {
     }
 }
 
+/// Resolves the format named by `&name` on the ** line: `name.fmt` in the
+/// working directory, then in each directory of `SABITEX_FORMATS`, then
+/// through `kpsewhich -engine=sabitex -format=fmt` (formats installed
+/// under an engine directory of a TeX Live tree).
+fn find_format(name: &str) -> Option<String> {
+    let file = if name.ends_with(".fmt") {
+        name.to_string()
+    } else {
+        format!("{name}.fmt")
+    };
+    if std::path::Path::new(&file).is_file() {
+        return Some(file);
+    }
+    if let Some(dirs) = std::env::var_os("SABITEX_FORMATS") {
+        for dir in std::env::split_paths(&dirs) {
+            let p = dir.join(&file);
+            if p.is_file() {
+                return Some(p.to_string_lossy().into_owned());
+            }
+        }
+    }
+    std::process::Command::new("kpsewhich")
+        .args(["-engine=sabitex", "-format=fmt", &file])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .filter(|p| !p.is_empty() && std::path::Path::new(p).is_file())
+}
+
 /// Unix seconds -> local-ish (UTC) civil date + minutes past midnight.
 fn civil_from_unix(secs: i64) -> (i32, i32, i32, i32) {
     let days = secs.div_euclid(86_400);
@@ -243,6 +273,26 @@ fn main() {
             Some(format!("\\input {joined}"))
         }
     };
+    // `&name` on the ** line names a format (the TeX convention). An
+    // explicit --fmt wins when both are given; the engine itself skips the
+    // spec when it reads the line (tex.web 1337).
+    if fmt_path.is_none() {
+        if let Some(spec) = first
+            .as_deref()
+            .and_then(|f| f.trim_start().strip_prefix('&'))
+        {
+            let name: String = spec.chars().take_while(|c| !c.is_whitespace()).collect();
+            if !name.is_empty() {
+                match find_format(&name) {
+                    Some(p) => fmt_path = Some(p),
+                    None => {
+                        eprintln!("sabitex: Sorry, I can't find the format `{name}.fmt'");
+                        std::process::exit(1);
+                    }
+                }
+            }
+        }
+    }
     let mut engine = Engine::new(
         Sizes::production(),
         Box::new(NativeFs::new()),
