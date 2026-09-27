@@ -181,6 +181,10 @@ pub struct Engine {
     /// True until the first job runs: arenas are still all-zero from
     /// construction, so format loading may skip its zero-fills.
     pub pristine: bool,
+    /// A format load failed part-way (T1/T2): the arenas hold an unspecified
+    /// mixture of old and new state, so the engine refuses to run a job.
+    /// The host must build a fresh engine.
+    pub fmt_poisoned: bool,
     /// pTeX `inhibit_glue_flag`: set by \inhibitglue, consumed by the
     /// next append_kanji's JFM glue decision.
     pub inhibit_glue_flag: bool,
@@ -435,6 +439,7 @@ impl Engine {
             log_opened: false,
             log_streamed: 0,
             pristine: true,
+            fmt_poisoned: false,
             inhibit_glue_flag: false,
             jfont_seen: false,
             hash_overflow_reported: false,
@@ -958,12 +963,31 @@ impl Engine {
         self.eqtb.set_int(base + crate::eqtb::YEAR_CODE, year);
     }
 
+    /// A failed `load_fmt` leaves the arenas in an unspecified state; a job
+    /// must not run on them (T1/T2: no stale or half-loaded state is ever
+    /// exposed as a result).
+    pub(crate) fn refuse_if_poisoned(&mut self) -> TexResult<()> {
+        if self.fmt_poisoned {
+            return Err(self.fatal_error("engine is unusable after a failed format load"));
+        }
+        Ok(())
+    }
+
+    /// Loads a format. On `Err` the engine is poisoned: its arenas may hold
+    /// a mixture of old and new state, and `run_terminal_job` / `run_file`
+    /// refuse to start. Build a fresh engine to retry.
     pub fn load_fmt(&mut self, bytes: &[u8]) -> TexResult<()> {
+        if self.fmt_poisoned {
+            return Err(self.fatal_error("engine is unusable after a failed format load"));
+        }
         let mut r = crate::fmt::FmtReader::new(bytes);
         let res = self.load_fmt_inner(&mut r);
         match res {
             Ok(()) => Ok(()),
-            Err(msg) => Err(self.fatal_error(msg)),
+            Err(msg) => {
+                self.fmt_poisoned = true;
+                Err(self.fatal_error(msg))
+            }
         }
     }
 
