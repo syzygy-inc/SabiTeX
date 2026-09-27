@@ -1,0 +1,6 @@
+# 参照資源のロック（qa-v0 段階 1）。基準は TeX Live 2025 の配布物。scripts/qa-resources.sh record で書き直し、check で照合する。
+# 名前	必須	sha256
+cmr10.tfm	required	87f2d8981927644cbecaf3d639e96e348ea4e7be49d8804468bd8ba9ff3f5244
+plain.tex	required	7c1223b880fa513542a616b86c4fa02d5ee703839427951982d7e311fd9049b2
+hyphen.tex	required	2c18acdc04c1a066aeb1759905e7ca449f0616c314b5ed6aebe55b9d4a89b8d4
+story.tex	required	592939f339e78d7faca19c75017ec338db7c9efdea085c4374e5b13909cc8ec6

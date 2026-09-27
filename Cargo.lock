@@ -65,7 +65,12 @@ name = "sabitex-core"
 version = "0.0.1"
 dependencies = [
  "rustybuzz",
+ "sabitex-qa",
 ]
+
+[[package]]
+name = "sabitex-qa"
+version = "0.0.1"
 
 [[package]]
 name = "sabitex-wasm"

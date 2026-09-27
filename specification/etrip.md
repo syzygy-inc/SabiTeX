@@ -2,7 +2,8 @@
 
 `crates/sabitex-core/tests/etrip.rs` が、e-TeX の e-TRIP テスト(etex.ch Appendix / `reference/etex/etrip/`)を再現する。
 INITEX パス(`*etrip`)と VIRTEX パス(`&etrip etrip`)の両方に対し、以下のマスク済み差分を除いて参照 `etripin.log` / `etrip.log` / `etrip.fot` と一致することを要求する。
-さらに `etrip.out` はバイト同一であること、`etrip.dvi`(220 bytes)は dvitype 出力が参照 `etrip.typ` と banner および DVI コメントの日付以外で一致することを要求する。
+さらに `etrip.out` はバイト同一であること、`etrip.dvi`(220 bytes)は dvitype 出力が参照 `etrip.typ` と banner および DVI コメントの日付以外で一致することを要求する
+(契約 case TEX-ETRIP-DVITYPE。テストが `dvitype` を実行して比較する。無ければ BLOCKED。[cases.md](cases.md))。
 
 ## 実行条件
 

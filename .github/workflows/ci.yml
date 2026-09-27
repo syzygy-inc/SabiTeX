@@ -22,8 +22,16 @@ jobs:
         run: cargo fmt --all --check
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: Test
-        run: cargo test --workspace
+      - name: Test (no TeX Live here; oracle cases must be BLOCKED, never PASS)
+        run: |
+          rm -rf target/qa-ledger
+          cargo test --workspace
+          ! grep -E "^TEX-(GOLDEN|TRIP-DVITYPE|ETRIP-DVITYPE)" target/qa-ledger/*.tsv | grep -q "PASS"
+      - name: Strict must fail without TeX Live
+        env:
+          SABI_STRICT_TESTS: "1"
+        run: |
+          if cargo test -p sabitex-core --test dvi_golden; then echo "strict passed without TeX Live"; exit 1; fi
       - name: Build (wasm32)
         run: cargo build -p sabitex-core --target wasm32-unknown-unknown
       - name: Examples (smoke)
@@ -36,3 +44,26 @@ jobs:
           (cd examples/japanese && ../../target/release/sabitex --interaction=batchmode japanese && test -s japanese.dvi)
           (cd examples/mixed && ../../target/release/sabitex --interaction=batchmode "*\input mixed" && test -s mixed.dvi)
           node examples/wasm-node/main.mjs
+
+  oracle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install TeX Live (tex, dvitype, plain, story, cmr10)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends texlive-binaries texlive-base texlive-plain-generic
+          for t in tex dvitype kpsewhich; do printf '%s: ' "$t"; which "$t" || echo "(missing)"; done
+          for f in cmr10.tfm plain.tex hyphen.tex story.tex; do printf '%s: ' "$f"; kpsewhich "$f" || echo "(missing)"; done
+      - name: Reference resources (lock; required present, digests match the baseline)
+        run: sh scripts/qa-resources.sh check
+      - name: Test (strict)
+        env:
+          SABI_STRICT_TESTS: "1"
+        run: |
+          rm -rf target/qa-ledger
+          cargo test --workspace
+      - name: Ledger (all planned cases PASS with their comparisons)
+        run: sh scripts/qa-ledger.sh

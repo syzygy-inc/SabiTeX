@@ -5,40 +5,68 @@
 //! in INITEX mode, then compares the DVI files byte for byte. The date
 //! parameters are pinned in the source so the DVI preamble comment matches.
 //!
-//! The tests skip (with a note) when no `tex`/`kpsewhich` is on PATH.
-
-use std::process::Command;
+//! Each test is a contract case TEX-GOLDEN-* (`specification/cases.md`,
+//! C-DVI). Without `tex`/`kpsewhich` a case is BLOCKED (a failure under
+//! `SABI_STRICT_TESTS`); a `tex` that runs but produces no DVI is FAIL.
 
 use sabitex_core::io::{CaptureTerminal, MemFs};
 use sabitex_core::{Engine, Sizes};
+use sabitex_qa::{run_tool, Case};
 
 const PREAMBLE: &str = "\\catcode`\\{=1 \\catcode`\\}=2 \\catcode`\\#=6 \
                         \\year=1776 \\month=7 \\day=4 \\time=720 ";
 
-/// Locates a TFM file via kpsewhich; None if TeX Live is unavailable.
-fn kpsewhich(name: &str) -> Option<Vec<u8>> {
-    let out = Command::new("kpsewhich").arg(name).output().ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    std::fs::read(path).ok()
+/// The case behind each golden test, keyed by its tag.
+fn case_for(tag: &str) -> Case {
+    let id = match tag {
+        "empty" => "TEX-GOLDEN-EMPTY",
+        "paragraph" => "TEX-GOLDEN-PARAGRAPH",
+        "story" => "TEX-GOLDEN-STORY",
+        "math" => "TEX-GOLDEN-MATH",
+        "align" => "TEX-GOLDEN-ALIGN",
+        "fmtstory" => "TEX-GOLDEN-FMT",
+        "read" => "TEX-GOLDEN-READ",
+        "disc" => "TEX-GOLDEN-DISC",
+        "ligkern" => "TEX-GOLDEN-LIGKERN",
+        "glue" => "TEX-GOLDEN-GLUE",
+        "vbox" => "TEX-GOLDEN-VBOX",
+        "boxes" => "TEX-GOLDEN-BOXES",
+        "atsize" => "TEX-GOLDEN-ATSIZE",
+        other => panic!("no case for tag {other}"),
+    };
+    Case::required(id, &["C-DVI", "C-TEX"])
 }
 
-/// Runs `src` through Knuth's tex (INITEX); returns the DVI bytes.
-fn reference_dvi(src: &str, tag: &str) -> Option<Vec<u8>> {
+/// Locates a file via kpsewhich; None if TeX Live is unavailable.
+fn kpsewhich(name: &str) -> Option<Vec<u8>> {
+    std::fs::read(sabitex_qa::kpsewhich(name)?).ok()
+}
+
+/// Runs `src` through Knuth's tex (INITEX); returns the DVI bytes, or None
+/// when `tex` is not installed (the caller records BLOCKED). A `tex` that
+/// runs but writes no DVI is a FAIL of the case.
+fn reference_dvi(case: &Case, src: &str, tag: &str) -> Option<Vec<u8>> {
     let dir = std::env::temp_dir().join(format!("sabitex-golden-{tag}-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).ok()?;
-    std::fs::write(dir.join("test.tex"), src).ok()?;
-    let out = Command::new("tex")
-        .args(["-ini", "-interaction=batchmode", "test.tex"])
-        .current_dir(&dir)
-        .output()
-        .ok()?;
-    let _ = out;
-    let dvi = std::fs::read(dir.join("test.dvi")).ok();
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    std::fs::write(dir.join("test.tex"), src).expect("temp file");
+    // tex exits non-zero after any error in batchmode, and the sources here
+    // are meant to be error-free; a non-zero status is therefore a FAIL.
+    let ran = run_tool(
+        case,
+        "tex",
+        &["-ini", "-interaction=batchmode", "test.tex"],
+        Some(&dir),
+    );
+    if ran.is_none() {
+        let _ = std::fs::remove_dir_all(&dir);
+        return None;
+    }
+    let dvi = std::fs::read(dir.join("test.dvi"));
     let _ = std::fs::remove_dir_all(&dir);
-    dvi
+    match dvi {
+        Ok(d) => Some(d),
+        Err(_) => case.tool_failed("tex produced no test.dvi"),
+    }
 }
 
 /// Runs `src` through SabiTeX; returns the DVI bytes.
@@ -67,10 +95,15 @@ fn sabitex_dvi(src: &str, tfms: &[&str]) -> Vec<u8> {
 }
 
 fn compare(src_body: &str, tfms: &[&str], tag: &str) {
+    let case = case_for(tag);
     let src = format!("{PREAMBLE}{src_body}");
-    let Some(reference) = reference_dvi(&src, tag) else {
-        eprintln!("SKIPPED ({tag}): TeX Live not available");
-        return;
+    for tfm in tfms {
+        if kpsewhich(&format!("{tfm}.tfm")).is_none() {
+            return case.blocked(&format!("{tfm}.tfm not found (kpsewhich)"));
+        }
+    }
+    let Some(reference) = reference_dvi(&case, &src, tag) else {
+        return case.blocked("tex (TeX Live) not found");
     };
     let ours = sabitex_dvi(&src, tfms);
     if ours != reference {
@@ -91,6 +124,8 @@ fn compare(src_body: &str, tfms: &[&str], tag: &str) {
             &reference[n..(n + 16).min(reference.len())],
         );
     }
+    case.compared();
+    case.done();
 }
 
 /// A `TexFs` that serves `test.tex` from memory and everything else from
@@ -140,14 +175,13 @@ fn sabitex_dvi_kpse(src: &str) -> Vec<u8> {
 
 /// The M3 acceptance comparison: kpsewhich-backed inputs on both sides.
 fn compare_kpse(src_body: &str, tag: &str) {
+    let case = case_for(tag);
     let src = format!("{PREAMBLE}{src_body}");
     if kpsewhich("plain.tex").is_none() {
-        eprintln!("SKIPPED ({tag}): TeX Live not available");
-        return;
+        return case.blocked("plain.tex not found (kpsewhich)");
     }
-    let Some(reference) = reference_dvi(&src, tag) else {
-        eprintln!("SKIPPED ({tag}): TeX Live not available");
-        return;
+    let Some(reference) = reference_dvi(&case, &src, tag) else {
+        return case.blocked("tex (TeX Live) not found");
     };
     let ours = sabitex_dvi_kpse(&src);
     if ours != reference {
@@ -167,6 +201,8 @@ fn compare_kpse(src_body: &str, tag: &str) {
             &reference[n..(n + 16).min(reference.len())],
         );
     }
+    case.compared();
+    case.done();
 }
 
 #[test]
@@ -226,14 +262,13 @@ fn alignment_dvi_matches_knuth_tex() {
 /// that story.tex still comes out byte-identical to Knuth's tex.
 #[test]
 fn format_dump_and_load_roundtrip() {
+    let case = case_for("fmtstory");
     if kpsewhich("plain.tex").is_none() {
-        eprintln!("SKIPPED (fmt): TeX Live not available");
-        return;
+        return case.blocked("plain.tex not found (kpsewhich)");
     }
     let src = format!("{PREAMBLE}\\input plain \\input story \\end");
-    let Some(reference) = reference_dvi(&src, "fmtstory") else {
-        eprintln!("SKIPPED (fmt): TeX Live not available");
-        return;
+    let Some(reference) = reference_dvi(&case, &src, "fmtstory") else {
+        return case.blocked("tex (TeX Live) not found");
     };
     // 1) INITEX pass: load plain.tex and \dump.
     let mut fs = KpseFs::default();
@@ -274,6 +309,8 @@ fn format_dump_and_load_roundtrip() {
             reference.len()
         );
     }
+    case.compared();
+    case.done();
 }
 
 /// M5: `\openin`/`\read`/`\ifeof` against a data file.
@@ -287,21 +324,24 @@ fn read_from_file_matches_knuth_tex() {
                 \\read3 to \\lineone \\read3 to \\linetwo \
                 \\shipout\\hbox{\\lineone-\\linetwo} \\closein3 \\end";
     // Reference run needs data.tex next to test.tex.
+    let case = case_for("read");
     let src = format!("{PREAMBLE}{body}");
-    let Some(reference) = ({
-        std::fs::write(dir.join("test.tex"), &src).ok();
-        let out = Command::new("tex")
-            .args(["-ini", "-interaction=batchmode", "test.tex"])
-            .current_dir(&dir)
-            .output()
-            .ok();
-        out.and_then(|_| std::fs::read(dir.join("test.dvi")).ok())
-    }) else {
-        eprintln!("SKIPPED (read): TeX Live not available");
+    std::fs::write(dir.join("test.tex"), &src).expect("temp file");
+    let ran = run_tool(
+        &case,
+        "tex",
+        &["-ini", "-interaction=batchmode", "test.tex"],
+        Some(&dir),
+    );
+    if ran.is_none() {
         let _ = std::fs::remove_dir_all(&dir);
-        return;
-    };
+        return case.blocked("tex (TeX Live) not found");
+    }
+    let reference = std::fs::read(dir.join("test.dvi"));
     let _ = std::fs::remove_dir_all(&dir);
+    let Ok(reference) = reference else {
+        case.tool_failed("tex produced no test.dvi");
+    };
     let mut fs = KpseFs::default();
     fs.files
         .insert("test.tex".to_string(), src.as_bytes().to_vec());
@@ -327,6 +367,8 @@ fn read_from_file_matches_knuth_tex() {
             reference.len()
         );
     }
+    case.compared();
+    case.done();
 }
 
 /// M4: \discretionary and explicit hyphen control.
