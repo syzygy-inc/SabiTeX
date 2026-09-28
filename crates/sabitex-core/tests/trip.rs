@@ -5,13 +5,17 @@
 //! Knuth's `tripin.log`, masking the lines tripman.tex declares
 //! system-dependent (banner, dates, memory statistics, string counts).
 //!
-//! The test is `#[ignore]`d until the M5 diagnostics work (help texts,
-//! exact `show_context`, tracing formats) lands; run it manually with
-//! `cargo test --test trip -- --ignored` to inspect the current diff. The
-//! artifacts are written to `target/trip/` for side-by-side comparison.
+//! The artifacts are written to `target/trip/` for side-by-side comparison.
+//!
+//! Each pass is a contract case (`specification/cases.md`): TEX-TRIP-INITEX
+//! and TEX-TRIP-VIRTEX compare the transcripts, and TEX-TRIP-DVITYPE runs the
+//! installed `dvitype` on our trip.dvi and compares the listing with Knuth's
+//! trip.typ (BLOCKED when dvitype is not installed; required in the oracle
+//! profile). The byte count alone is not a content comparison.
 
 use sabitex_core::io::{CaptureTerminal, MemFs};
 use sabitex_core::{Engine, Sizes};
+use sabitex_qa::{dvitype_matches, Case};
 
 fn repo_path(rel: &str) -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -151,6 +155,7 @@ fn normalize(log: &str, is_reference: bool) -> Vec<String> {
 /// procedure).
 #[test]
 fn trip_virtex_pass() {
+    let case = Case::required("TEX-TRIP-VIRTEX", &["C-TEX", "C-DVI"]);
     let trip_tex = std::fs::read(repo_path("reference/tex/trip/trip.tex"))
         .expect("reference/tex/trip vendored");
     let trip_tfm = std::fs::read(repo_path("reference/tex/trip/trip.tfm")).expect("trip.tfm");
@@ -185,15 +190,37 @@ fn trip_virtex_pass() {
         panic!("engine aborted during VIRTEX trip.tex: {err}");
     }
     let dvi = e2.take_output("trip.dvi").expect("trip.dvi produced");
-    std::fs::write(dir.join("ours-trip.dvi"), &dvi).ok();
+    std::fs::write(dir.join("ours-trip.dvi"), &dvi).expect("target/trip is writable");
     // dvitype output of this file matches reference/tex/trip/trip.typ exactly
     // (banner aside); guard the byte count Knuth's trip.log reports.
     assert_eq!(dvi.len(), 2920, "trip.dvi byte count");
+    case.compared();
 
     let diffs = compare("trip.log", &log, &reference);
     let fot_ref = std::fs::read_to_string(repo_path("reference/tex/trip/trip.fot")).unwrap();
     let fot_diffs = compare("trip.fot", &fot, &fot_ref);
     assert_eq!(diffs + fot_diffs, 0, "unmasked differences remain");
+    case.compared_n(2);
+    case.done();
+
+    // tripman.tex step 4: dvitype of trip.dvi against trip.typ, banner aside.
+    let typ = Case::required("TEX-TRIP-DVITYPE", &["C-DVI"]);
+    let typ_ref = std::fs::read_to_string(repo_path("reference/tex/trip/trip.typ")).unwrap();
+    // dvitype reads the TFM of every font the DVI defines (trip.typ was
+    // produced with trip.tfm available); without it the listing says
+    // "TFM file can't be opened" and the character lines differ.
+    std::fs::copy(
+        repo_path("reference/tex/trip/trip.tfm"),
+        dir.join("trip.tfm"),
+    )
+    .unwrap();
+    match dvitype_matches(&typ, &dir.join("ours-trip.dvi"), &typ_ref, false) {
+        Some(n) => {
+            typ.compared_n(n);
+            typ.done();
+        }
+        None => typ.blocked("dvitype (TeX Live) not found"),
+    }
 }
 
 /// Compares a transcript against Knuth's reference, returning the number
@@ -223,6 +250,7 @@ fn compare(what: &str, ours_raw: &str, reference: &str) -> usize {
 
 #[test]
 fn trip_initex_pass() {
+    let case = Case::required("TEX-TRIP-INITEX", &["C-TEX"]);
     let trip_tex = std::fs::read(repo_path("reference/tex/trip/trip.tex"))
         .expect("reference/tex/trip vendored");
     let trip_tfm = std::fs::read(repo_path("reference/tex/trip/trip.tfm"))
@@ -245,7 +273,10 @@ fn trip_initex_pass() {
     }
     // The format file must also have been produced.
     assert!(e.take_output("trip.fmt").is_some(), "trip.fmt was dumped");
+    case.compared();
 
     let diffs = compare("tripin.log", &log, &reference);
     assert_eq!(diffs, 0, "{diffs} unmasked differences against tripin.log");
+    case.compared();
+    case.done();
 }

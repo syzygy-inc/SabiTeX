@@ -4,6 +4,7 @@ members = [
     "crates/sabitex-core",
     "crates/sabitex-cli",
     "crates/sabitex-wasm",
+    "crates/sabitex-qa",
 ]
 
 [workspace.package]

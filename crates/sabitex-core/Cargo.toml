@@ -9,6 +9,11 @@ repository.workspace = true
 [dependencies]
 rustybuzz = { version = "0.20.1", optional = true }
 
+[dev-dependencies]
+# Test-only: the contract case ledger (oracle profile). Not a dependency of
+# the engine itself, which stays dependency-free.
+sabitex-qa = { path = "../sabitex-qa" }
+
 [features]
 shaping = ["dep:rustybuzz"]
 # Intentionally empty: sabitex-core must stay dependency-free and wasm32-clean.

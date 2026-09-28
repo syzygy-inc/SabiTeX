@@ -36,7 +36,9 @@ dvitype -output-level=2 -dpi=72.27 -page-start='*.*.*.*.*.*.*.*.*.*' \
     target/trip/ours-trip.dvi | diff --strip-trailing-cr - reference/tex/trip/trip.typ
 ```
 
-差分はバナー行 1 行のみであること(テストは byte 数 2920 を検証する)。
+差分はバナー行 1 行のみであること。テストは byte 数 2920 に加え、`dvitype` が入っていればこの比較そのものを行う
+(契約 case TEX-TRIP-DVITYPE。`sabitex_qa::dvitype_matches`。dvitype が無ければ BLOCKED で、oracle プロファイルの CI では必須。
+[cases.md](cases.md))。byte 数だけでは内容比較の代わりにならない。
 
 ## 比較規則と根拠
 

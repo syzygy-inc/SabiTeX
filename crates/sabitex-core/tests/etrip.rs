@@ -7,9 +7,15 @@
 //! (etrip3.in) and compares etrip.log/etrip.fot/etrip.out.
 //!
 //! Artifacts are written to `target/etrip/` for side-by-side comparison.
+//!
+//! Contract cases (`specification/cases.md`): TEX-ETRIP-INITEX and
+//! TEX-ETRIP-VIRTEX compare the transcripts and etrip.out; TEX-ETRIP-DVITYPE
+//! runs the installed `dvitype` on our etrip.dvi against etrip.typ (banner and
+//! the dated DVI comment aside; BLOCKED without dvitype).
 
 use sabitex_core::io::{CaptureTerminal, MemFs};
 use sabitex_core::{Engine, Sizes};
+use sabitex_qa::{dvitype_matches, Case};
 
 fn repo_path(rel: &str) -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -129,6 +135,7 @@ fn compare(what: &str, ours_raw: &str, reference: &str) -> usize {
 
 #[test]
 fn etrip_virtex_pass() {
+    let case = Case::required("TEX-ETRIP-VIRTEX", &["C-TEX", "C-DVI"]);
     let etrip_tex = std::fs::read(repo_path("reference/etex/etrip/etrip.tex"))
         .expect("reference/etex/etrip vendored");
     let etrip_tfm = std::fs::read(repo_path("reference/etex/etrip/etrip.tfm")).expect("etrip.tfm");
@@ -168,21 +175,44 @@ fn etrip_virtex_pass() {
     // dvitype output of this file matches reference/etex/etrip/etrip.typ exactly
     // (banner and DVI-comment date aside); guard the byte count.
     let dvi = e2.take_output("etrip.dvi").expect("etrip.dvi produced");
-    std::fs::write(dir.join("ours-etrip.dvi"), &dvi).ok();
+    std::fs::write(dir.join("ours-etrip.dvi"), &dvi).expect("target/etrip is writable");
     assert_eq!(dvi.len(), 220, "etrip.dvi byte count");
+    case.compared();
     let outf = e2.take_output("etrip.out").expect("etrip.out produced");
     std::fs::write(dir.join("ours-etrip.out"), &outf).ok();
     let out_ref = std::fs::read(repo_path("reference/etex/etrip/etrip.out")).unwrap();
     assert_eq!(outf, out_ref, "etrip.out differs");
+    case.compared();
 
     let diffs = compare("etrip.log", &log, &reference);
     let fot_ref = std::fs::read_to_string(repo_path("reference/etex/etrip/etrip.fot")).unwrap();
     let fot_diffs = compare("etrip.fot", &fot, &fot_ref);
     assert_eq!(diffs + fot_diffs, 0, "unmasked differences remain");
+    case.compared_n(2);
+    case.done();
+
+    // etripman: dvitype of etrip.dvi against etrip.typ (banner and the dated
+    // DVI comment aside).
+    let typ = Case::required("TEX-ETRIP-DVITYPE", &["C-DVI"]);
+    let typ_ref = std::fs::read_to_string(repo_path("reference/etex/etrip/etrip.typ")).unwrap();
+    // dvitype needs the TFM of every font the DVI defines (see trip.rs).
+    std::fs::copy(
+        repo_path("reference/etex/etrip/etrip.tfm"),
+        dir.join("etrip.tfm"),
+    )
+    .unwrap();
+    match dvitype_matches(&typ, &dir.join("ours-etrip.dvi"), &typ_ref, true) {
+        Some(n) => {
+            typ.compared_n(n);
+            typ.done();
+        }
+        None => typ.blocked("dvitype (TeX Live) not found"),
+    }
 }
 
 #[test]
 fn etrip_initex_pass() {
+    let case = Case::required("TEX-ETRIP-INITEX", &["C-TEX"]);
     let etrip_tex = std::fs::read(repo_path("reference/etex/etrip/etrip.tex"))
         .expect("reference/etex/etrip vendored");
     let etrip_tfm = std::fs::read(repo_path("reference/etex/etrip/etrip.tfm"))
@@ -209,7 +239,10 @@ fn etrip_initex_pass() {
         panic!("engine aborted during etrip.tex: {err}");
     }
     assert!(e.take_output("etrip.fmt").is_some(), "etrip.fmt was dumped");
+    case.compared();
 
     let diffs = compare("etripin.log", &log, &reference);
     assert_eq!(diffs, 0, "{diffs} unmasked differences against etripin.log");
+    case.compared();
+    case.done();
 }
