@@ -9,7 +9,8 @@ sabitex --version | -V
 `<first line>` は TeX の `**` プロンプトに打つ 1 行と同じ扱いで、次のように解釈される。
 
 - `sabitex story`：先頭が `\` `&` `*` 以外なら `\input story` に展開する
-- `sabitex "&plain story"`：フォーマット `plain.fmt` をロードして `story.tex` を処理する(`--fmt plain.fmt` との併用も可)
+- `sabitex "&plain story"`：フォーマット `plain.fmt` をロードして `story.tex` を処理する(下記「フォーマットの解決」。`--fmt` があればそちらが優先)
+- `sabitex "&plain \relax ..."`：フォーマットをロードし、続く命令をそのまま解釈する
 - `sabitex "*\relax ..."` や `sabitex "\input story"`：そのまま解釈する
 - 引数なし：`**` プロンプトを表示し、標準入力から読む
 
@@ -32,6 +33,17 @@ sabitex --version | -V
 
 TeX Live がなくても、必要なファイルをカレントディレクトリ(または相対パスで届く場所)に置けば動く。
 環境変数 `SABITEX_TRACE_FILES` をセットすると、各ファイルがどこで解決されたかを stderr に表示する。
+
+## フォーマットの解決
+
+`**` 行の `&name` は次の順で `name.fmt` を探す。見つからなければ `Sorry, I can't find the format` を表示して終了コード 1 で終わる
+(実 TeX の「will try PLAIN」のような既定への切替はしない)。
+
+1. カレントディレクトリ
+2. 環境変数 `SABITEX_FORMATS` の各ディレクトリ(パス区切りで複数可)
+3. `kpsewhich -engine=sabitex -format=fmt name.fmt`(TeX Live の `texmf-var/web2c/sabitex/` などに置いたもの)
+
+`--fmt <path>` はこの探索を通さず、指定したパスをそのままロードする。ロードに失敗した(壊れている、別の定数で作られた)場合も終了コード 1。
 
 ## フォーマットの生成(INITEX)
 
