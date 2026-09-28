@@ -154,10 +154,15 @@ pub unsafe extern "C" fn sabitex_vfs_add(
 /// prepared engine waits for `sabitex_run`; hosts can call this ahead of
 /// time (and can time undump separately from the job).
 ///
+/// Any previously prepared engine is discarded first, whether or not this
+/// call succeeds (T2): after a failed prepare there is no prepared engine,
+/// and `sabitex_run` returns 2 until the next successful prepare.
+///
 /// # Safety
 /// `fmt_ptr..fmt_ptr+fmt_len` must be a live allocation.
 #[no_mangle]
 pub unsafe extern "C" fn sabitex_prepare(fmt_ptr: *const u8, fmt_len: usize) -> u32 {
+    PREPARED.with(|p| *p.borrow_mut() = None);
     let fmt_name = String::from_utf8_lossy(slice_from(fmt_ptr, fmt_len)).into_owned();
     let missing = MISSING.with(|m| {
         m.borrow_mut().clear();
@@ -305,4 +310,77 @@ pub unsafe extern "C" fn sabitex_output_len(name_ptr: *const u8, name_len: usize
 #[no_mangle]
 pub extern "C" fn sabitex_output_ptr() -> *const u8 {
     LAST_OUTPUT.with(|l| l.borrow().as_ptr())
+}
+
+#[cfg(test)]
+mod tests {
+    //! The ABI called natively. Each test runs on its own thread, so the
+    //! thread-local state is not shared between tests.
+    use super::*;
+
+    unsafe fn prepare(fmt: &str) -> u32 {
+        sabitex_prepare(fmt.as_ptr(), fmt.len())
+    }
+
+    unsafe fn run(first: &str) -> u32 {
+        sabitex_run(first.as_ptr(), first.len())
+    }
+
+    unsafe fn vfs_add(name: &str, data: &[u8]) {
+        sabitex_vfs_add(name.as_ptr(), name.len(), data.as_ptr(), data.len());
+    }
+
+    fn output(name: &str) -> Vec<u8> {
+        take_output(name)
+    }
+
+    /// C-JOB (T2): a failed prepare leaves no prepared engine. The run after
+    /// it fails with 2 instead of consuming the engine of an earlier prepare,
+    /// and the next successful prepare recovers.
+    #[test]
+    fn a_failed_prepare_discards_the_previous_engine() {
+        unsafe {
+            assert_eq!(prepare(""), 0, "INITEX prepare");
+            assert_eq!(prepare("no-such.fmt"), 2, "format not in the VFS");
+            assert_eq!(run("\\end"), 2, "no engine to run");
+            assert_eq!(prepare(""), 0);
+            assert_eq!(run("\\end"), 0);
+            assert!(!output("<terminal>").is_empty());
+        }
+    }
+
+    /// C-JOB / C-RESOURCE (T1 + T2): a corrupt format in the VFS is a normal
+    /// load failure (2), not a trap, and it also leaves no prepared engine.
+    #[test]
+    fn a_corrupt_format_fails_to_load_without_a_trap() {
+        unsafe {
+            assert_eq!(prepare(""), 0);
+            let mut junk = b"SabiTeXfmt4".to_vec();
+            junk.extend_from_slice(&[0xff; 64]);
+            vfs_add("bad.fmt", &junk);
+            assert_eq!(prepare("bad.fmt"), 2);
+            assert_eq!(run("\\end"), 2);
+            // a length field of u64::MAX right after a valid header prefix
+            let mut huge = b"SabiTeXfmt4".to_vec();
+            huge.extend_from_slice(&[0; 40]);
+            huge.push(0);
+            huge.extend_from_slice(&u64::MAX.to_le_bytes());
+            vfs_add("huge.fmt", &huge);
+            assert_eq!(prepare("huge.fmt"), 2);
+            assert_eq!(run("\\end"), 2);
+        }
+    }
+
+    /// Each prepare serves exactly one run.
+    #[test]
+    fn a_prepared_engine_serves_exactly_one_run() {
+        unsafe {
+            assert_eq!(prepare(""), 0);
+            assert_eq!(run("\\end"), 0);
+            assert_eq!(run("\\end"), 2);
+            assert_eq!(sabitex_compile("\\end".as_ptr(), 4, "".as_ptr(), 0), 0);
+            assert_eq!(sabitex_compile("\\end".as_ptr(), 4, "x.fmt".as_ptr(), 5), 2);
+            assert_eq!(run("\\end"), 2);
+        }
+    }
 }

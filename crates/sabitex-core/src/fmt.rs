@@ -83,8 +83,14 @@ impl<'a> FmtReader<'a> {
         FmtReader { data, pos: 0 }
     }
 
+    /// Bytes not yet consumed.
+    pub fn remaining(&self) -> usize {
+        self.data.len() - self.pos
+    }
+
     fn take(&mut self, n: usize) -> FmtResult<&'a [u8]> {
-        if self.pos + n > self.data.len() {
+        // `n` comes from the file: no arithmetic on it before the bound check.
+        if n > self.remaining() {
             return Err("unexpected end of format file");
         }
         let s = &self.data[self.pos..self.pos + n];
@@ -108,8 +114,28 @@ impl<'a> FmtReader<'a> {
         Ok(u64::from_le_bytes(self.take(8)?.try_into().unwrap()))
     }
 
-    pub fn seq_len(&mut self) -> FmtResult<usize> {
-        Ok(self.u64()? as usize)
+    /// A count stored in the file that is checked by the caller against a
+    /// fixed expectation (an array size) before anything is allocated. Only
+    /// the conversion to `usize` is validated here (no truncation on 32-bit).
+    pub fn count(&mut self) -> FmtResult<usize> {
+        usize::try_from(self.u64()?).map_err(|_| "count in format file does not fit in memory")
+    }
+
+    /// The length of a sequence whose elements take `elem` bytes each. The
+    /// length is validated against the bytes that remain in the file
+    /// *before* any allocation, so a corrupt or hostile length is a normal
+    /// error and never a panic or a huge allocation (T1). `elem` must be
+    /// at least 1.
+    pub fn seq_len(&mut self, elem: usize) -> FmtResult<usize> {
+        debug_assert!(elem >= 1);
+        let n = self.count()?;
+        let bytes = n
+            .checked_mul(elem)
+            .ok_or("sequence length in format file overflows")?;
+        if bytes > self.remaining() {
+            return Err("sequence in format file is longer than the rest of the file");
+        }
+        Ok(n)
     }
 
     pub fn bool(&mut self) -> FmtResult<bool> {
@@ -117,13 +143,13 @@ impl<'a> FmtReader<'a> {
     }
 
     pub fn str(&mut self) -> FmtResult<String> {
-        let n = self.seq_len()?;
+        let n = self.seq_len(1)?;
         let b = self.take(n)?;
         String::from_utf8(b.to_vec()).map_err(|_| "bad string in format file")
     }
 
     pub fn u16s(&mut self) -> FmtResult<Vec<u16>> {
-        let n = self.seq_len()?;
+        let n = self.seq_len(2)?;
         let mut v = Vec::with_capacity(n);
         for _ in 0..n {
             v.push(self.u16()?);
@@ -132,12 +158,12 @@ impl<'a> FmtReader<'a> {
     }
 
     pub fn u8s(&mut self) -> FmtResult<Vec<u8>> {
-        let n = self.seq_len()?;
+        let n = self.seq_len(1)?;
         Ok(self.take(n)?.to_vec())
     }
 
     pub fn i32s(&mut self) -> FmtResult<Vec<i32>> {
-        let n = self.seq_len()?;
+        let n = self.seq_len(4)?;
         let mut v = Vec::with_capacity(n);
         for _ in 0..n {
             v.push(self.i32()?);
@@ -146,7 +172,7 @@ impl<'a> FmtReader<'a> {
     }
 
     pub fn words(&mut self) -> FmtResult<Vec<crate::memword::MemoryWord>> {
-        let n = self.seq_len()?;
+        let n = self.seq_len(8)?;
         let mut v = Vec::with_capacity(n);
         for _ in 0..n {
             v.push(crate::memword::MemoryWord::from_bits(self.u64()?));
@@ -160,5 +186,87 @@ impl<'a> FmtReader<'a> {
         } else {
             Err("trailing garbage in format file")
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn with_len(len: u64, payload: &[u8]) -> Vec<u8> {
+        let mut v = len.to_le_bytes().to_vec();
+        v.extend_from_slice(payload);
+        v
+    }
+
+    /// T1: a length that does not fit is a normal error, never a panic or an
+    /// allocation of that size.
+    #[test]
+    fn huge_lengths_are_errors_not_panics() {
+        for len in [u64::MAX, u64::MAX / 2, 1 << 40, 1 << 32] {
+            let d = with_len(len, &[0; 16]);
+            assert!(FmtReader::new(&d).u16s().is_err(), "{len}");
+            assert!(FmtReader::new(&d).i32s().is_err(), "{len}");
+            assert!(FmtReader::new(&d).words().is_err(), "{len}");
+            assert!(FmtReader::new(&d).u8s().is_err(), "{len}");
+            assert!(FmtReader::new(&d).str().is_err(), "{len}");
+        }
+    }
+
+    /// The length is checked against the bytes that remain, per element size.
+    #[test]
+    fn lengths_beyond_the_rest_of_the_file_are_errors() {
+        // 3 u16 need 6 bytes; only 4 follow.
+        let d = with_len(3, &[0; 4]);
+        assert!(FmtReader::new(&d).u16s().is_err());
+        // exactly enough
+        let d = with_len(2, &[1, 0, 2, 0]);
+        assert_eq!(FmtReader::new(&d).u16s().unwrap(), vec![1, 2]);
+        // 1 word needs 8 bytes; only 7 follow
+        let d = with_len(1, &[0; 7]);
+        assert!(FmtReader::new(&d).words().is_err());
+        // a string longer than the file
+        let d = with_len(5, b"abc");
+        assert!(FmtReader::new(&d).str().is_err());
+    }
+
+    /// Reads past the end (including at the very end) are errors, and the
+    /// reader stays usable afterwards.
+    #[test]
+    fn short_reads_are_errors() {
+        let mut r = FmtReader::new(&[1, 2, 3]);
+        assert!(r.i32().is_err());
+        assert_eq!(r.u8().unwrap(), 1);
+        assert_eq!(r.u16().unwrap(), 0x0302);
+        assert!(r.u8().is_err());
+        assert!(r.done().is_ok());
+    }
+
+    /// Round trip of every writer/reader pair.
+    #[test]
+    fn writer_and_reader_agree() {
+        let mut w = FmtWriter::default();
+        w.u8(7);
+        w.u16(65535);
+        w.i32(-1);
+        w.u64(u64::MAX);
+        w.bool(true);
+        w.str("fmt");
+        w.u16s(&[1, 2, 3]);
+        w.u8s(&[9]);
+        w.i32s(&[-5, 5]);
+        w.words(&[crate::memword::MemoryWord::from_bits(0x0102_0304_0506_0708)]);
+        let mut r = FmtReader::new(&w.buf);
+        assert_eq!(r.u8().unwrap(), 7);
+        assert_eq!(r.u16().unwrap(), 65535);
+        assert_eq!(r.i32().unwrap(), -1);
+        assert_eq!(r.u64().unwrap(), u64::MAX);
+        assert!(r.bool().unwrap());
+        assert_eq!(r.str().unwrap(), "fmt");
+        assert_eq!(r.u16s().unwrap(), vec![1, 2, 3]);
+        assert_eq!(r.u8s().unwrap(), vec![9]);
+        assert_eq!(r.i32s().unwrap(), vec![-5, 5]);
+        assert_eq!(r.words().unwrap()[0].bits(), 0x0102_0304_0506_0708);
+        assert!(r.done().is_ok());
     }
 }

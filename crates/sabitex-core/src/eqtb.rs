@@ -579,13 +579,13 @@ impl Eqtb {
 
     /// §1314-§1319: undump them (the layout must match).
     pub fn undump(&mut self, r: &mut crate::fmt::FmtReader) -> crate::fmt::FmtResult<()> {
-        let n = r.seq_len()?;
+        let n = r.count()?;
         if n != self.table.len() {
             return Err("eqtb size mismatch");
         }
         let mut i = 0;
         while i < n {
-            let run = r.u64()? as usize;
+            let run = r.count()?;
             let start = r.u64()?;
             let delta = r.u64()?;
             if i + run > n {
@@ -602,13 +602,13 @@ impl Eqtb {
             }
             i += run;
         }
-        let n = r.seq_len()?;
+        let n = r.count()?;
         if n != self.xeq_level.len() {
             return Err("xeq_level size mismatch");
         }
         let mut i = 0;
         while i < n {
-            let run = r.u64()? as usize;
+            let run = r.count()?;
             let v = r.u16()?;
             if i + run > n {
                 return Err("xeq run overflow");

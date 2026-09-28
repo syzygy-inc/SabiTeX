@@ -68,6 +68,7 @@ impl Engine {
     /// Starts reading from a "file" provided via `TexFs` under `name`, then
     /// runs the main loop until `\end` or end of input.
     pub fn run_file(&mut self, name: &str) -> TexResult<()> {
+        self.refuse_if_poisoned()?;
         // §1337: the first line arrives through the terminal buffer and is
         // tokenized by main_control, so buffer offsets (`first`, and with
         // them `max_buf_stack`) match tex.web exactly.
@@ -99,6 +100,7 @@ impl Engine {
     /// line does not start with an escape character — opens that file
     /// directly, *before* `main_control` runs `\everyjob`.
     pub fn run_terminal_job(&mut self) -> TexResult<()> {
+        self.refuse_if_poisoned()?;
         // Arenas are about to be written: format loads may no longer
         // assume all-zero memory (A14 zero-fill skip).
         self.pristine = false;
@@ -131,9 +133,15 @@ impl Engine {
         while loc < self.inp.last && self.inp.buffer[loc as usize] == ' ' as i32 {
             loc += 1;
         }
-        // §1337: skip over a "&format" specification (already loaded).
+        // §1337: skip over a "&format" specification (already loaded), and
+        // then the blanks after it ("while (loc<limit) and (buffer[loc]=" ")
+        // do incr(loc)"), so that `&fmt \commands` sees the escape character
+        // and does not try to \input an empty file name.
         if loc < self.inp.last && self.inp.buffer[loc as usize] == '&' as i32 {
             while loc < self.inp.last && self.inp.buffer[loc as usize] != ' ' as i32 {
+                loc += 1;
+            }
+            while loc < self.inp.last && self.inp.buffer[loc as usize] == ' ' as i32 {
                 loc += 1;
             }
         }

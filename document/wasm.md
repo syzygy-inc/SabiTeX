@@ -25,6 +25,23 @@ cargo build --release -p sabitex-wasm --target wasm32-unknown-unknown
 prepare と run の分割は、フォーマットのロード(undump)を先行して行っておくための仕組みである。
 1 回の `sabitex_prepare` につき 1 回だけ `sabitex_run` できる(ジョブごとに作り直す)。
 
+## prepare / run の状態と出力の有効性
+
+| 時点 | prepare 済みエンジン | `sabitex_run` の結果 | 出力(`sabitex_output_*`) |
+|---|---|---|---|
+| 初期状態、または run の後 | 無し | `2` | 直前のジョブのもの(run の後)、または空 |
+| prepare 開始 | 以前のエンジンは**破棄済み**(成功・失敗にかかわらず) | – | 直前のジョブのもの |
+| prepare 成功(`0`) | 有り | `0` / `1` を返して消費される | run が置き換える |
+| prepare 失敗(`2`: VFS に無い、ロード失敗) | **無し**。失敗前のエンジンが残ることはない | `2` | 直前のジョブのもの。失敗した prepare の痕跡は `<terminal>` に出ることがある |
+| run 中の trap(panic) | 不定(ホストはインスタンスを作り直す) | – | `<panic>` に文言(要 `sabitex_init_panic_hook`) |
+
+- 壊れた・切り詰められた fmt は通常のロード失敗(`2`)であり、trap しない(`SabiTeXfmt4` の見出しを持つ不正な長さも同じ)。
+  core 側では `Engine::load_fmt` が失敗したエンジンは以後のジョブとロードを拒否する(`fmt_poisoned`)。
+- 出力ポインタ(`sabitex_output_ptr`)は次の `sabitex_output_len` 呼び出しまで有効。線形メモリが伸びると JS 側の `ArrayBuffer` は
+  切り離されるので、呼び出しのたびに `memory.buffer` を読み直してから複製する。
+- 検査: `crates/sabitex-wasm/src/lib.rs` の単体テスト(prepare 失敗後の run が `2`、壊れた fmt、1 prepare = 1 run)、
+  `crates/sabitex-core/tests/fmt_roundtrip.rs`(dump → 別エンジンで load → マクロと register を観測、切断・不正長・定数違い)。
+
 ## 出力の名前
 
 `sabitex_output_len` / `sabitex_output_ptr` には、実ファイル名(`doc.dvi`、`doc.log` など)のほか、次の仮想名を渡せる。

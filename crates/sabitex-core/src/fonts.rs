@@ -218,13 +218,14 @@ impl FontMem {
         splice(&mut self.size, r.i32s()?)?;
         splice(&mut self.dsize, r.i32s()?)?;
         splice(&mut self.params, r.i32s()?)?;
-        let n = r.seq_len()?;
+        // each string carries at least its 8-byte length
+        let n = r.seq_len(8)?;
         let mut name = Vec::with_capacity(n);
         for _ in 0..n {
             name.push(r.str()?);
         }
         splice(&mut self.name, name)?;
-        let n = r.seq_len()?;
+        let n = r.seq_len(8)?;
         let mut area = Vec::with_capacity(n);
         for _ in 0..n {
             area.push(r.str()?);

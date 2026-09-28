@@ -92,13 +92,23 @@ impl StringPool {
         if pool.len() > self.pool_size {
             return Err("string pool overflow");
         }
-        let n = r.seq_len()?;
+        let n = r.seq_len(8)?;
         if n > self.max_strings + 1 {
             return Err("max strings overflow");
         }
         let mut str_start = Vec::with_capacity(n);
         for _ in 0..n {
-            str_start.push(r.u64()? as usize);
+            let s = r.count()?;
+            if s > pool.len() {
+                return Err("string start beyond the pool");
+            }
+            str_start.push(s);
+        }
+        if str_start.is_empty() {
+            return Err("string table is empty");
+        }
+        if str_start.windows(2).any(|w| w[0] > w[1]) {
+            return Err("string starts are not monotone");
         }
         self.pool = pool;
         self.str_start = str_start;
