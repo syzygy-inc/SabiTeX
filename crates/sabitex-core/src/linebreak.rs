@@ -481,9 +481,8 @@ impl Engine {
                     };
                 }
             }
-            let node_r_stays_active: bool;
             let mut goto_deactivate = false;
-            if b > crate::types::INF_BAD || pi == EJECT_PENALTY {
+            let node_r_stays_active: bool = if b > crate::types::INF_BAD || pi == EJECT_PENALTY {
                 // §854.
                 if self.lb.final_pass
                     && self.lb.minimum_demerits == AWFUL_BAD
@@ -494,14 +493,14 @@ impl Engine {
                 } else if b > self.lb.threshold {
                     goto_deactivate = true;
                 }
-                node_r_stays_active = false;
+                false
             } else {
                 prev_r = r;
                 if b > self.lb.threshold {
                     continue 'body;
                 }
-                node_r_stays_active = true;
-            }
+                true
+            };
             if !goto_deactivate {
                 // §855: record a new feasible break.
                 let mut d: i32;

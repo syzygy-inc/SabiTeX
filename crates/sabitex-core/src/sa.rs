@@ -255,9 +255,8 @@ impl Engine {
 
     /// `print_sa_num(q)` (etex.ch): the register number of an element.
     pub fn print_sa_num(&mut self, q: Pointer) {
-        let n;
-        if self.sa_index(q) < DIMEN_VAL_LIMIT {
-            n = self.sa_ptr(q); // sa_num
+        let n = if self.sa_index(q) < DIMEN_VAL_LIMIT {
+            self.sa_ptr(q) // sa_num
         } else {
             let mut m = i32::from(self.sa_index(q)) % 16;
             let mut q = self.mem.link(q);
@@ -266,8 +265,8 @@ impl Engine {
             m += 256
                 * (i32::from(self.sa_index(q)) % 16
                     + 16 * (i32::from(self.sa_index(self.mem.link(q))) % 16));
-            n = m;
-        }
+            m
+        };
         self.print_int(n);
     }
 
