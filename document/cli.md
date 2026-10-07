@@ -9,7 +9,7 @@ sabitex --version | -V
 `<first line>` は TeX の `**` プロンプトに打つ 1 行と同じ扱いで、次のように解釈される。
 
 - `sabitex story`：先頭が `\` `&` `*` 以外なら `\input story` に展開する
-- `sabitex "&plain story"`：フォーマット `plain.fmt` をロードして `story.tex` を処理する(`--fmt plain.fmt` との併用も可)
+- `sabitex "&plain story"`：フォーマット `plain.fmt` をロードして `story.tex` を処理する。`plain.fmt` は `--fmt` と同じくパスとして解決する(カレントディレクトリ基準、kpsewhich は経由しない)。`--fmt` と併用した場合は `--fmt` のファイルをロードする
 - `sabitex "*\relax ..."` や `sabitex "\input story"`：そのまま解釈する
 - 引数なし：`**` プロンプトを表示し、標準入力から読む
 

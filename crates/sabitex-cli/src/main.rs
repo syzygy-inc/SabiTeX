@@ -243,6 +243,23 @@ fn main() {
             Some(format!("\\input {joined}"))
         }
     };
+    // §1337 skips a leading "&name" on the assumption that the format is
+    // already loaded, so the driver loads it here (§524 open_fmt_file):
+    // "&plain" names plain.fmt, resolved like --fmt. --fmt takes priority.
+    if fmt_path.is_none() {
+        if let Some(name) = first
+            .as_deref()
+            .and_then(|l| l.trim_start_matches(' ').strip_prefix('&'))
+            .and_then(|l| l.split(' ').next())
+            .filter(|n| !n.is_empty())
+        {
+            fmt_path = Some(if name.ends_with(".fmt") {
+                name.to_string()
+            } else {
+                format!("{name}.fmt")
+            });
+        }
+    }
     let mut engine = Engine::new(
         Sizes::production(),
         Box::new(NativeFs::new()),
