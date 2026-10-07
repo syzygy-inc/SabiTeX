@@ -369,6 +369,9 @@ impl Engine {
                     let ci = self.fonts.char_info(f, i32::from(self.mem.character(pp)));
                     d = self.fonts.char_width(f, ci);
                     found = true;
+                    if self.is_kanji_head(pp) {
+                        p = self.mem.link(p); // skip the KANJI code node
+                    }
                     break 'reswitch;
                 }
                 match self.mem.node_type(pp) {

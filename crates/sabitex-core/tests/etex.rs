@@ -929,3 +929,29 @@ fn ifincsname_matches_pdftex() {
     assert!(s.contains("out=O."), "{s:?}");
     assert!(s.contains("in=\\XI."), "{s:?}");
 }
+
+#[test]
+fn kanji_before_display_sets_predisplaysize() {
+    // §1146: the natural width of the line before a display must skip
+    // the KANJI code node of each Japanese pair (it used to be looked
+    // up in the JFM as a character index and panic).
+    let mut fs = MemFs::default();
+    let jfm = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../reference/uptex/umin10.tfm"
+    ))
+    .expect("fixture jfm");
+    fs.files.insert("umin10.tfm".to_string(), jfm);
+    let body = format!(
+        "{PREAMBLE}\\catcode`\\$=3 \\nonstopmode\\font\\j=umin10 \\j\
+         \\hsize=100pt \\parindent=0pt \
+         ああ$$\\message{{PDS=\\the\\predisplaysize}}$$\\par\\end"
+    );
+    fs.files.insert("test.tex".to_string(), body.into_bytes());
+    let (term, out) = CaptureTerminal::new(vec![r"*\input test".to_string()]);
+    let mut e = Engine::new(Sizes::default(), Box::new(fs), Box::new(term));
+    let _ = e.run_terminal_job();
+    let s = out.borrow().clone();
+    // euptex: two fullwidth quads of min10, no \quad of the null font.
+    assert!(s.contains("PDS=19.24432pt"), "{s:?}");
+}
